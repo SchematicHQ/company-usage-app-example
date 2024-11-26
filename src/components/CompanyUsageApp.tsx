@@ -12,7 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import Image from 'next/image';
 
+const DEFAULT_LOGO = '/company-placeholder.png'; // Add a placeholder image in your public folder
 interface Company {
   company: {
     id: string;
@@ -27,8 +29,16 @@ interface Company {
   allocation: number | null;
 }
 
+interface PaginationState {
+  offset: number;
+  limit: number;
+  total?: number;
+  hasMore: boolean;
+}
+
 interface ApiResponse {
   data: Company[];
+  pagination: PaginationState;
 }
 
 interface UsageAlert {
@@ -54,7 +64,7 @@ const POLLING_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const THRESHOLDS = [100, 90, 80];
 
 const formatNumber = (num: number | null): string => {
-  if (num === null) return '∞';
+  if (num === null || num === undefined) return '∞';
   return num.toLocaleString();
 };
 
@@ -169,11 +179,20 @@ const CompanyUsageList = ({
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
-                <img 
-                  src={company.company.logo_url} 
-                  alt={`${company.company.name} logo`}
-                  className="w-8 h-8 rounded-full"
-                />
+                <div className="relative w-8 h-8">
+                  <Image 
+                    src={company.company.logoUrl || DEFAULT_LOGO}
+                    alt={`${company.company.name} logo`}
+                    fill
+                    className="rounded-full object-cover"
+                    sizes="32px"
+                    onError={(e) => {
+                      // TypeScript requires this type assertion
+                      const img = e.target as HTMLImageElement;
+                      img.src = DEFAULT_LOGO;
+                    }}
+                  />
+                </div>
                 <div>
                   <h3 className="font-medium">{company.company.name}</h3>
                   <p className="text-sm text-gray-500">
@@ -227,6 +246,18 @@ const CompanyUsageList = ({
           </div>
         );
       })}
+            {data?.pagination.hasMore && (
+        <Button 
+          onClick={loadMore} 
+          disabled={loading}
+          className="mt-4 w-full"  // made it full width for better appearance
+        >
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : null}
+          Load More
+        </Button>
+      )}
     </div>
   );
 };
@@ -246,25 +277,32 @@ const CompanyUsageApp = () => {
     setWebhookLogs(prev => [log, ...prev].slice(0, 50));
   }, []);
 
-  const fetchData = async (id: string) => {
+  const fetchData = async (
+    featureId: string,
+    offset: number = 0,
+    limit: number = 100
+  ) => {
     setLoading(true);
     try {
-      const apiKey = process.env.NEXT_PUBLIC_SCHEMATIC_API_KEY;
       const response = await fetch(
-        `https://api.schematichq.com/feature-companies?feature_id=${id}`,
-        {
-          headers: {
-            'X-Schematic-Api-Key': apiKey || ''
-          }
-        }
+        `/api/feature-usage?featureId=${featureId}&offset=${offset}&limit=${limit}`
       );
       
       if (!response.ok) {
-        throw new Error('Failed to fetch data');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+  
       const jsonData = await response.json();
-      setData(jsonData);
+      setData(prev => {
+        if (offset === 0) {
+          return jsonData;
+        }
+        // Append data for pagination
+        return {
+          data: [...(prev?.data || []), ...jsonData.data],
+          pagination: jsonData.pagination
+        };
+      });
       setLastUpdated(new Date());
       setError(null);
     } catch (err) {
@@ -272,6 +310,22 @@ const CompanyUsageApp = () => {
       setData(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [pagination, setPagination] = useState<PaginationState>({
+    offset: 0,
+    limit: 100,
+    hasMore: true
+  });
+  
+  const loadMore = () => {
+    if (pagination.hasMore && !loading) {
+      fetchData(
+        featureId,
+        pagination.offset + pagination.limit,
+        pagination.limit
+      );
     }
   };
 
