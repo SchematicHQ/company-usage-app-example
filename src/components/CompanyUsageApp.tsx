@@ -75,13 +75,9 @@ const calculateUsagePercentage = (usage: number, allocation: number | null): num
 
 const CompanyUsageList = ({ 
   data, 
-  previousUsage,
-  setAlertSent,
   addWebhookLog
 }: { 
   data: ApiResponse | null;
-  previousUsage: Map<string, number>;
-  setAlertSent: React.Dispatch<React.SetStateAction<Set<string>>>;
   addWebhookLog: (log: WebhookLog) => void;
 }) => {
   const companies = data?.data || [];
@@ -194,9 +190,7 @@ const CompanyUsageApp = () => {
   const [error, setError] = useState<string | null>(null);
   const [featureId, setFeatureId] = useState('feat_8PMt5Yzd6Na');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [alertSent, setAlertSent] = useState<Set<string>>(new Set());
   const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
-  const previousUsage = useRef(new Map<string, number>()).current;
   const pollInterval = useRef<NodeJS.Timeout>();
 
   const addWebhookLog = useCallback((log: WebhookLog) => {
@@ -391,8 +385,6 @@ const CompanyUsageApp = () => {
                 ) : (
                   <CompanyUsageList 
                     data={data} 
-                    previousUsage={previousUsage}
-                    setAlertSent={setAlertSent}
                     addWebhookLog={addWebhookLog}
                   />
                 )}
