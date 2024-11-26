@@ -73,74 +73,6 @@ const calculateUsagePercentage = (usage: number, allocation: number | null): num
   return (usage / allocation) * 100;
 };
 
-const checkAndNotifyThresholds = async (
-  company: Company,
-  previousUsage: Map<string, number>,
-  setAlertSent: React.Dispatch<React.SetStateAction<Set<string>>>,
-  addWebhookLog: (log: WebhookLog) => void
-) => {
-  const usagePercentage = calculateUsagePercentage(company.usage, company.allocation);
-  const prevUsage = previousUsage.get(company.company.id) || 0;
-  const companyKey = company.company.id;
-
-  for (const threshold of THRESHOLDS) {
-    const alertKey = `${companyKey}-${threshold}`;
-    
-    if (usagePercentage >= threshold && 
-        calculateUsagePercentage(prevUsage, company.allocation) < threshold) {
-      
-      const logId = `${alertKey}-${Date.now()}`;
-      
-      try {
-        const alert: UsageAlert = {
-          companyId: company.company.id,
-          companyName: company.company.name,
-          threshold,
-          feature: company.feature.name,
-          usage: company.usage,
-          allocation: company.allocation,
-          timestamp: new Date().toISOString()
-        };
-
-        const webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_URL;
-        if (webhookUrl) {
-          const response = await fetch(webhookUrl, {
-            method: 'POST',
-            body: JSON.stringify(alert)
-          });
-
-          if (response.ok) {
-            setAlertSent(prev => new Set(prev).add(alertKey));
-            addWebhookLog({
-              id: logId,
-              companyName: company.company.name,
-              feature: company.feature.name,
-              threshold,
-              timestamp: new Date(),
-              status: 'success'
-            });
-          } else {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-        }
-      } catch (error) {
-        addWebhookLog({
-          id: logId,
-          companyName: company.company.name,
-          threshold,
-          timestamp: new Date(),
-          status: 'error',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
-        console.error('Failed to send webhook:', error);
-      }
-      break;
-    }
-  }
-
-  previousUsage.set(company.company.id, company.usage);
-};
-
 const CompanyUsageList = ({ 
   data, 
   previousUsage,
@@ -153,12 +85,6 @@ const CompanyUsageList = ({
   addWebhookLog: (log: WebhookLog) => void;
 }) => {
   const companies = data?.data || [];
-
-  useEffect(() => {
-    companies.forEach(company => {
-      checkAndNotifyThresholds(company, previousUsage, setAlertSent, addWebhookLog);
-    });
-  }, [companies, previousUsage, setAlertSent, addWebhookLog]);
 
   // Sort companies by utilization percentage
   const sortedCompanies = [...companies].sort((a, b) => {
@@ -346,9 +272,55 @@ const CompanyUsageApp = () => {
   }, [featureId]);
 
   useEffect(() => {
-    fetchData(featureId);
-    return setupPolling();
-  }, [featureId, setupPolling]);
+    const checkUsageAndNotifications = async () => {
+      await fetchData(featureId);
+      // Call our new notifications endpoint
+      try {
+        const response = await fetch('/api/usage-notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ featureId })
+        });
+        
+        if (response.ok) {
+          const { notifications } = await response.json();
+          // Only add to webhook logs if there were new notifications
+          if (notifications?.length > 0) {
+            notifications.forEach(notification => {
+              addWebhookLog({
+                id: `${notification.companyId}-${notification.threshold}-${Date.now()}`,
+                companyName: notification.companyName,
+                threshold: notification.threshold,
+                timestamp: new Date(notification.timestamp),
+                status: 'success'
+              });
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check notifications:', error);
+        addWebhookLog({
+          id: `error-${Date.now()}`,
+          companyName: 'System',
+          threshold: 0,
+          timestamp: new Date(),
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Failed to check notifications'
+        });
+      }
+    };
+
+    // Initial check
+    checkUsageAndNotifications();
+
+    // Set up polling interval
+    const interval = setInterval(checkUsageAndNotifications, POLLING_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [featureId]);
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
