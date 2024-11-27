@@ -28,28 +28,16 @@ interface Company {
   usage: number;
   allocation: number | null;
 }
-
 interface PaginationState {
   offset: number;
   limit: number;
   total?: number;
   hasMore: boolean;
 }
-
 interface ApiResponse {
   data: Company[];
   pagination: PaginationState;
 }
-
-interface UsageAlert {
-  companyId: string;
-  companyName: string;
-  threshold: number;
-  usage: number;
-  allocation: number | null;
-  timestamp: string;
-}
-
 interface WebhookLog {
   id: string;
   companyName: string;

@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
           // Send actual notification (implement your notification logic here)
           await sendNotification({
             companyId: company.company.id,
+            companyName: company.company.name,
             threshold,
             feature: company.feature.name,
             usage: company.usage,
