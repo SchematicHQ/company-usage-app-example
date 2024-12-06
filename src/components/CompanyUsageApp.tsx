@@ -48,8 +48,7 @@ interface WebhookLog {
   error?: string;
 }
 
-const POLLING_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
-const THRESHOLDS = [100, 90, 80];
+const POLLING_INTERVAL = 1 * 60 * 1000; // 5 minutes in milliseconds
 
 const formatNumber = (num: number | null): string => {
   if (num === null || num === undefined) return '∞';
@@ -185,7 +184,7 @@ const CompanyUsageApp = () => {
     setWebhookLogs(prev => [log, ...prev].slice(0, 50));
   }, []);
 
-  const fetchData = async (
+  const fetchData = useCallback(async (
     featureId: string,
     offset: number = 0,
     limit: number = 100
@@ -219,7 +218,7 @@ const CompanyUsageApp = () => {
     } finally {
       setLoading(false);
     }
-  };
+  },[]);
 
   const [pagination, setPagination] = useState<PaginationState>({
     offset: 0,
@@ -301,7 +300,7 @@ const CompanyUsageApp = () => {
     const interval = setInterval(checkUsageAndNotifications, POLLING_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [featureId]);
+  }, [featureId, fetchData]);
 
 
   const handleSubmit = (e: React.FormEvent) => {

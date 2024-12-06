@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SchematicClient } from "@schematichq/schematic-typescript-node";
 
-const THRESHOLDS = [80, 90, 100];
+const THRESHOLDS = [100, 90, 80];
 
 // You might want to use a proper database instead of this
 let lastNotifiedUsage = new Map<string, number>();
+let lastNotifiedAllocation = new Map<string, number>();
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.NEXT_PUBLIC_SCHEMATIC_API_KEY;
@@ -33,10 +34,11 @@ export async function POST(request: NextRequest) {
     for (const company of response.data) {
       const usagePercentage = (company.usage / (company.allocation || 1)) * 100;
       const lastUsage = lastNotifiedUsage.get(company.company.id) || 0;
+      const lastAllocation = lastNotifiedAllocation.get(company.company.id) || 0;
 
       for (const threshold of THRESHOLDS) {
         if (usagePercentage >= threshold && 
-            (lastUsage / (company.allocation || 1)) * 100 < threshold) {
+            (lastUsage / (lastAllocation || 1)) * 100 < threshold) {
           // Record notification
           notifications.push({
             companyId: company.company.id,
@@ -57,11 +59,15 @@ export async function POST(request: NextRequest) {
             usage: company.usage,
             allocation: company.allocation
           });
+
+          break;
         }
       }
 
       // Update last notified usage
       lastNotifiedUsage.set(company.company.id, company.usage);
+      lastNotifiedAllocation.set(company.company.id, company.allocation);
+
     }
 
     return NextResponse.json({ notifications });
